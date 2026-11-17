@@ -1,0 +1,123 @@
+@startuml
+skinparam classAttributeIconSize 0
+title Provisionamento Multinuvem — padrões GoF
+
+interface CloudFactory <<Abstract Factory>> {
+  +createVirtualMachine(n:int): VirtualMachine
+  +createObjectStorage(n:int): ObjectStorage
+  +createMessageQueue(n:int): MessageQueue
+  +getProviderName(): String
+  +getVmHourlyCost(): double
+  +getStorageCostPerGb(): double
+  +getQueueMonthlyCost(): double
+}
+interface VirtualMachine <<Abstract Product>> {
+  +getHourlyCost(): double
+}
+interface ObjectStorage <<Abstract Product>> {
+  +getCostPerGb(): double
+}
+interface MessageQueue <<Abstract Product>>
+interface Resource {
+  +getId(): String
+  +getProvider(): String
+  +getMonthlyCost(): double
+}
+Resource <|-- VirtualMachine
+Resource <|-- ObjectStorage
+Resource <|-- MessageQueue
+
+class AwsFactory <<Concrete Factory>>
+class AzureFactory <<Concrete Factory>>
+CloudFactory <|.. AwsFactory
+CloudFactory <|.. AzureFactory
+
+class AwsVirtualMachine <<Concrete Product>>
+class AwsObjectStorage <<Concrete Product>>
+class AwsMessageQueue <<Concrete Product>>
+class AzureVirtualMachine <<Concrete Product>>
+class AzureObjectStorage <<Concrete Product>>
+class AzureMessageQueue <<Concrete Product>>
+VirtualMachine <|.. AwsVirtualMachine
+ObjectStorage <|.. AwsObjectStorage
+MessageQueue <|.. AwsMessageQueue
+VirtualMachine <|.. AzureVirtualMachine
+ObjectStorage <|.. AzureObjectStorage
+MessageQueue <|.. AzureMessageQueue
+AwsFactory ..> AwsVirtualMachine : cria
+AwsFactory ..> AwsObjectStorage : cria
+AwsFactory ..> AwsMessageQueue : cria
+AzureFactory ..> AzureVirtualMachine : cria
+AzureFactory ..> AzureObjectStorage : cria
+AzureFactory ..> AzureMessageQueue : cria
+
+class EnvironmentProvisioner <<Director / Builder>> {
+  -factory: CloudFactory
+  +provision(request): Environment
+}
+EnvironmentProvisioner --> CloudFactory
+class EnvironmentRequest <<Value Object>> {
+  -name: String
+  -provider: String
+  -vmCount: int
+  -storageGb: int
+}
+class BudgetExceededException <<Exception>>
+RuntimeException <|-- BudgetExceededException
+class Environment <<Product>> {
+  -name: String
+  -provider: String
+  -region: String
+  -monthlyCost: double
+  +printSummary(): void
+}
+EnvironmentProvisioner ..> EnvironmentRequest : usa
+Main ..> EnvironmentRequest : cria
+EnvironmentProvisioner ..> Environment
+Environment o-- "1..*" VirtualMachine
+Environment o-- "1" ObjectStorage
+Environment o-- "1" MessageQueue
+
+class AppConfig <<Singleton>> {
+  -region: String
+  -monthlyBudget: double
+  -AppConfig()
+  +getInstance(): AppConfig
+}
+class AuditLog <<Thread-safe Singleton>> {
+  -records: List<AuditRecord>
+  -nextSequence: long
+  -AuditLog()
+  +getInstance(): AuditLog
+  +register(...): void
+  +printAll(): void
+}
+class AuditRecord <<Entity>> {
+  -sequence: long
+  -dateTime: LocalDateTime
+  -environment: String
+  -provider: String
+  -result: String
+}
+class Main <<Composition Root / Provider Selector>>
+Main ..> AwsFactory : seleciona
+Main ..> AzureFactory : seleciona
+Main ..> EnvironmentProvisioner
+Main ..> AuditLog
+EnvironmentProvisioner ..> AppConfig
+EnvironmentProvisioner ..> BudgetExceededException
+AuditLog o-- "*" AuditRecord
+
+note right of CloudFactory
+Abstract Factory garante uma família
+de produtos do mesmo provedor.
+end note
+note right of AppConfig
+Singleton Holder: carrega config
+uma única vez.
+end note
+note right of AuditLog
+Singleton + synchronized:
+registro atômico e ordenado por sequência.
+end note
+@enduml

@@ -1,0 +1,196 @@
+@startuml
+skinparam classAttributeIconSize 0
+title Casa de Leilões Online — Observer, Strategy e Decorator (GoF)
+
+' ===================== OBSERVER (RNF01) =====================
+interface Sujeito <<Subject>> {
+  +acompanhar(o: Observador): void
+  +deixarDeAcompanhar(o: Observador): void
+  +notificar(l: Lance): void
+}
+interface Observador <<Observer>> {
+  +getNome(): String
+  +atualizar(lote: Lote, lance: Lance): void
+}
+class Lote <<ConcreteSubject / Context da Strategy>> {
+  -nome: String
+  -precoInicial: double
+  -precoReserva: double
+  -estado: Estado
+  -valorVenda: double
+  -comissaoCobrada: double
+  +darLance(autor: Observador, valor: double): ResultadoLance
+  +encerrar(): void
+  +setRegraComissao(r: RegraComissao): void
+  +getLanceAtual(): double
+}
+enum "Lote.Estado" as Estado {
+  ABERTO
+  VENDIDO
+  NAO_VENDIDO
+}
+class Lance <<Evento>> {
+  -valor: double
+  +getAutor(): Observador
+  +getValor(): double
+}
+class ResultadoLance <<Value Object>> {
+  +aceito(): boolean
+  +mensagem(): String
+}
+class Participante <<ConcreteObserver>> {
+  -nome: String
+  +darLance(lote: Lote, valor: double): ResultadoLance
+}
+class PainelLeiloeiro <<ConcreteObserver>> {
+  -resumos: Map<Lote, Resumo>
+}
+class Auditor <<ConcreteObserver>> {
+  -registros: List<String>
+  +imprimirRegistros(): void
+}
+
+Sujeito <|.. Lote
+Observador <|.. Participante
+Observador <|.. PainelLeiloeiro
+Observador <|.. Auditor
+Lote o-- "*" Observador : observadores
+Lote *-- "*" Lance : lances
+Lote --> Estado
+Lance --> "1" Observador : autor
+Lote ..> ResultadoLance : retorna
+Observador ..> Lote : atualizar(lote, lance)
+Observador ..> Lance
+Participante ..> ResultadoLance
+
+' ===================== STRATEGY (RNF02) =====================
+interface Categoria <<Categoria do lote>> {
+  +getNome(): String
+  +regraComissaoPadrao(): RegraComissao
+}
+class Arte <<ConcreteCategoria>>
+class Veiculos <<ConcreteCategoria>>
+class Imoveis <<ConcreteCategoria>>
+class Eletronicos <<ConcreteCategoria>>
+Categoria <|.. Arte
+Categoria <|.. Veiculos
+Categoria <|.. Imoveis
+Categoria <|.. Eletronicos
+Lote --> "1" Categoria
+
+interface RegraComissao <<Strategy>> {
+  +calcular(valorVenda: double): double
+  +getDescricao(): String
+}
+class ComissaoArte <<ConcreteStrategy>> {
+  20% do valor
+}
+class ComissaoVeiculos <<ConcreteStrategy>> {
+  8% do valor, limite R$ 5.000,00
+}
+class ComissaoImoveis <<ConcreteStrategy>> {
+  3% do valor + R$ 1.500,00
+}
+class ComissaoEletronicos <<ConcreteStrategy>> {
+  12% do valor, mínimo R$ 50,00
+}
+RegraComissao <|.. ComissaoArte
+RegraComissao <|.. ComissaoVeiculos
+RegraComissao <|.. ComissaoImoveis
+RegraComissao <|.. ComissaoEletronicos
+Lote o-- "1" RegraComissao : regraComissao (trocável em execução)
+Arte ..> ComissaoArte : cria
+Veiculos ..> ComissaoVeiculos : cria
+Imoveis ..> ComissaoImoveis : cria
+Eletronicos ..> ComissaoEletronicos : cria
+
+class AcertoVendedor <<Utilitário RF10>> {
+  +{static} imprimir(lote: Lote): void
+}
+AcertoVendedor ..> Lote
+
+' ===================== DECORATOR (RNF03 / RNF04) =====================
+interface Cobranca <<Component>> {
+  +getValorVenda(): double
+  +getItens(): List<ItemFatura>
+  +getTotal(): double
+}
+class ItemFatura <<Value Object>> {
+  +descricao(): String
+  +custo(): double
+}
+class VendaLote <<ConcreteComponent>> {
+  -lote: Lote
+}
+abstract class ServicoAdicional <<Decorator>> {
+  -base: Cobranca
+  #{abstract} descricaoServico(): String
+  #{abstract} custoServico(): double
+}
+class SeguroTransporte <<ConcreteDecorator>> {
+  1,5% do valor de venda
+}
+class CertificadoAutenticidade <<ConcreteDecorator>> {
+  R$ 300,00 fixos
+}
+class EmbalagemEspecial <<ConcreteDecorator>> {
+  R$ 180,00 fixos
+}
+class EntregaExpressa <<ConcreteDecorator>> {
+  R$ 450,00 fixos
+}
+class ImpressoraFatura <<Cliente do Component>> {
+  +{static} imprimir(c: Cobranca): void
+}
+Cobranca <|.. VendaLote
+Cobranca <|.. ServicoAdicional
+ServicoAdicional o-- "1" Cobranca : base
+ServicoAdicional <|-- SeguroTransporte
+ServicoAdicional <|-- CertificadoAutenticidade
+ServicoAdicional <|-- EmbalagemEspecial
+ServicoAdicional <|-- EntregaExpressa
+Cobranca ..> ItemFatura
+VendaLote ..> Lote : lê lote vendido
+ImpressoraFatura ..> Cobranca
+
+' ===================== UTILITÁRIO E MAIN =====================
+class Dinheiro <<Utilitário>> {
+  +{static} formatar(valor: double): String
+}
+class Main <<Composition Root / Cenário RF11>>
+Main ..> Lote
+Main ..> Participante
+Main ..> PainelLeiloeiro
+Main ..> Auditor
+Main ..> Arte
+Main ..> Eletronicos
+Main ..> ComissaoEletronicos : troca a regra (RF07)
+Main ..> VendaLote
+Main ..> SeguroTransporte
+Main ..> CertificadoAutenticidade
+Main ..> EmbalagemEspecial
+Main ..> EntregaExpressa
+Main ..> ImpressoraFatura
+Main ..> AcertoVendedor
+
+note right of Sujeito
+Observer: o Lote só conhece Observador.
+Novo interessado = nova classe que
+implementa Observador (Lote intacto).
+end note
+note right of RegraComissao
+Strategy: nova categoria = nova Categoria
++ nova RegraComissao, sem if/switch.
+Troca em tempo de execução via
+Lote.setRegraComissao().
+end note
+note right of ServicoAdicional
+Decorator: serviços combináveis em qualquer
+ordem e quantidade, sem classes de
+combinação. Novo serviço = nova subclasse.
+end note
+note bottom of ImpressoraFatura
+Imprime qualquer Cobranca da mesma forma,
+sem verificar quais serviços existem (RNF04).
+end note
+@enduml
